@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Tracker</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="background-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="container">
+        <h1>Task Tracker</h1>
+
+        <!-- Auth Section -->
+        <div id="auth-section">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="showTab('login')">Login</button>
+                <button class="tab-btn" onclick="showTab('signup')">Sign Up</button>
+            </div>
+
+            <div id="login-form" class="auth-form">
+                <h2>Login</h2>
+                <input type="text" id="login-identifier" placeholder="Email or Username" required>
+                <input type="password" id="login-password" placeholder="Password" required>
+                <button onclick="login()">Login</button>
+            </div>
+
+            <div id="signup-form" class="auth-form" style="display: none;">
+                <h2>Sign Up</h2>
+                <input type="text" id="signup-username" placeholder="Username" required>
+                <input type="email" id="signup-email" placeholder="Email" required>
+                <input type="password" id="signup-password" placeholder="Password" required>
+                <button onclick="signup()">Sign Up</button>
+            </div>
+            <p id="auth-message"></p>
+        </div>
+
+        <div id="dashboard-section" style="display: none;">
+            <div class="header">
+                <h2>Welcome, <span id="user-display">User</span></h2>
+                <button onclick="logout()" class="logout-btn">Logout</button>
+            </div>
+
+            <div class="content">
+                <div class="add-expense">
+                    <h3>Add New Task</h3>
+                    <form id="expense-form" onsubmit="addExpense(event)">
+                        <input type="text" id="desc" placeholder="Task description..." required>
+                        <input type="number" id="amount" placeholder="Value/Cost ($)" step="0.01" required>
+                        <input type="text" id="category" placeholder="Category" required>
+                        <input type="date" id="date" required>
+                        <button type="submit">Add Task</button>
+                    </form>
+                </div>
+
+                <div class="expense-list">
+                    <div class="list-header">
+                        <h3>Your Tasks</h3>
+                        <div class="search-container">
+                            <input type="text" id="search-input" placeholder="Search tasks..."
+                                onkeydown="handleSearch(event)" oninput="handleSearchInput(event)">
+                        </div>
+                        <div class="financial-summary">
+                            <div class="budget-display">
+                                Budget:
+                                <span id="budget-display-wrapper">
+                                    $<span id="budget-amount">0.00</span>
+                                    <button onclick="toggleBudgetEdit()" class="icon-btn">✎</button>
+                                </span>
+                                <div id="budget-input-wrapper" style="display: none;">
+                                    $<input type="number" id="budget-input" step="500" onblur="saveBudget()"
+                                        onkeydown="handleBudgetInput(event)">
+                                </div>
+                            </div>
+                            <div class="total-display">Total: $<span id="total-amount">0.00</span></div>
+                        </div>
+                    </div>
+                    <div class="budget-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="budget-progress"></div>
+                        </div>
+                        <small id="budget-text">Spent $0 of $0 (0%)</small>
+                    </div>
+                    <ul id="expenses-ul">
+                        <!-- Tasks will be loaded here -->
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
