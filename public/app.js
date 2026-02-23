@@ -246,7 +246,20 @@ function requestDelete(id) {
 
 function cancelDelete(id) {
     const actionsDiv = document.getElementById(`actions-${id}`);
+
+    // Find the expense so we can rebuild the edit button with its data
+    const exp = allExpenses.find(e => e.id === id || e._id === id);
+    if (!exp) {
+        // Fallback: reload if expense not found in memory
+        loadExpenses();
+        return;
+    }
+
+    const safeDesc = exp.description.replace(/'/g, "\\'");
+    const safeCat = exp.category.replace(/'/g, "\\'");
+
     actionsDiv.innerHTML = `
+        <button onclick="enableInlineEdit('${exp.id}', '${safeDesc}', '${exp.amount}', '${safeCat}', '${exp.date}')" class="edit-btn" title="Edit">✎</button>
         <button onclick="requestDelete('${id}')" title="Delete">✕</button>
     `;
 }
