@@ -13,17 +13,19 @@ document.addEventListener('DOMContentLoaded', () => {
         showAuth();
     }
 
-    // Set max date to today
+    // Set default date to today and restrict future dates
     const dateInput = document.getElementById('date');
     if (dateInput) {
-        dateInput.max = new Date().toISOString().split('T')[0];
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.max = today;
+        dateInput.value = today; // Default to today so form can submit without manual selection
     }
 });
 
 // UI Logic
-function showTab(tab) {
+function showTab(tab, event) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) event.target.classList.add('active');
 
     if (tab === 'login') {
         document.getElementById('login-form').style.display = 'block';
@@ -33,6 +35,13 @@ function showTab(tab) {
         document.getElementById('signup-form').style.display = 'block';
     }
     document.getElementById('auth-message').textContent = '';
+}
+
+// Utility: safely escape HTML to prevent XSS
+function escapeHTML(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
 }
 
 function showDashboard() {
@@ -146,8 +155,8 @@ function renderExpenses(expensesToRender) {
 
         li.innerHTML = `
             <div class="expense-info">
-                <strong>${exp.description}</strong>
-                <small>${exp.category} • ${createdDate}</small>
+                <strong>${escapeHTML(exp.description)}</strong>
+                <small>${escapeHTML(exp.category)} • ${createdDate}</small>
             </div>
             <div style="display:flex; align-items:center;">
                 <span class="expense-amount">$${exp.amount}</span>
@@ -190,10 +199,15 @@ function handleSearchInput(event) {
 
 async function addExpense(e) {
     e.preventDefault();
-    const description = document.getElementById('desc').value;
+    const description = document.getElementById('desc').value.trim();
     const amount = document.getElementById('amount').value;
-    const category = document.getElementById('category').value;
+    const category = document.getElementById('category').value.trim();
     const date = document.getElementById('date').value;
+
+    if (!date) {
+        alert('Please select a date.');
+        return;
+    }
 
     try {
         const res = await fetch(`${API_URL}/expenses`, {
@@ -207,12 +221,18 @@ async function addExpense(e) {
 
         if (res.ok) {
             document.getElementById('expense-form').reset();
-            // Reset date to today after reset
-            document.getElementById('date').value = new Date().toISOString().split('T')[0];
+            // Restore default date to today after form reset
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('date').value = today;
+            document.getElementById('date').max = today;
             loadExpenses();
+        } else {
+            const data = await res.json();
+            alert(`Failed to add task: ${data.error || data.details || 'Unknown error'}`);
         }
     } catch (err) {
         console.error(err);
+        alert('Network error — could not add task.');
     }
 }
 
@@ -366,9 +386,8 @@ function updateBudgetUI() {
 function enableInlineEdit(id, description, amount, category, date) {
     const li = document.getElementById(`expense-${id}`);
 
-    // Format date for input
-    const dateObj = new Date(date);
-    const formattedDate = dateObj.toISOString().split('T')[0];
+    // Format date for input — split the ISO string directly to avoid timezone-shift issues
+    const formattedDate = date ? date.split('T')[0] : '';
 
     // Escape quotes for values
     const safeDesc = description.replace(/"/g, '&quot;');

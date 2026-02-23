@@ -41,10 +41,10 @@ exports.updateExpense = async (req, res) => {
             return res.status(404).json({ error: 'Expense not found' });
         }
 
-        expense.description = description || expense.description;
-        expense.amount = amount || expense.amount;
-        expense.category = category || expense.category;
-        expense.date = date || expense.date;
+        expense.description = description ?? expense.description;
+        expense.amount = amount ?? expense.amount;
+        expense.category = category ?? expense.category;
+        expense.date = date ?? expense.date;
 
         await expense.save();
 
