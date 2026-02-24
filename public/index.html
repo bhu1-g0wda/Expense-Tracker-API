@@ -45,15 +45,19 @@
         <div id="dashboard-section" style="display: none;">
             <div class="header">
                 <h2>Welcome, <span id="user-display">User</span></h2>
-                <button onclick="logout()" class="logout-btn">Logout</button>
+                <div style="display:flex; gap: 0.75rem;">
+                    <button onclick="window.location.href='analytics.html'" class="logout-btn"
+                        style="background: linear-gradient(135deg,#e0e7ff,#fae8ff);">Analytics</button>
+                    <button onclick="logout()" class="logout-btn">Logout</button>
+                </div>
             </div>
 
             <div class="content">
                 <div class="add-expense">
-                    <h3>Add New Task</h3>
+                    <h2>Add New Task</h2>
                     <form id="expense-form" onsubmit="addExpense(event)">
                         <input type="text" id="desc" placeholder="Task description..." required>
-                        <input type="number" id="amount" placeholder="Value/Cost ($)" step="0.01" required>
+                        <input type="number" id="amount" placeholder="Value/Cost ($)" step="any" min="0" required>
                         <input type="text" id="category" placeholder="Category" required>
                         <input type="date" id="date" required>
                         <button type="submit">Add Task</button>
@@ -62,7 +66,7 @@
 
                 <div class="expense-list">
                     <div class="list-header">
-                        <h3>Your Tasks</h3>
+                        <h2>Total Tasks</h2>
                         <div class="search-container">
                             <input type="text" id="search-input" placeholder="Search tasks..."
                                 onkeydown="handleSearch(event)" oninput="handleSearchInput(event)">

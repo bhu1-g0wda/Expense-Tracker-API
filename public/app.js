@@ -1,4 +1,7 @@
-const API_URL = 'http://localhost:3000'; // Reverted for local testing
+let API_URL = '';
+if (window.location.protocol === 'file:' || ((window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && window.location.port !== '3000')) {
+    API_URL = 'http://localhost:3000';
+}
 
 // Auth State
 let token = localStorage.getItem('token');
@@ -73,8 +76,11 @@ async function signup() {
 
         if (res.ok) {
             document.getElementById('auth-message').textContent = 'Signup successful! Please login.';
-            // Trigger click on the login tab button to switch view and update UI state
-            document.querySelector('.tab-btn[onclick="showTab(\'login\')"]').click();
+            // Switch to login tab
+            showTab('login', null);
+            document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+                btn.classList.toggle('active', i === 0);
+            });
         } else {
             document.getElementById('auth-message').textContent = data.error;
         }
@@ -124,9 +130,29 @@ async function loadExpenses() {
         const res = await fetch(`${API_URL}/expenses`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        allExpenses = await res.json();
-        // Sort by date (newest first)
-        allExpenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // Handle expired/invalid token
+        if (res.status === 401 || res.status === 403) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            token = null;
+            user = null;
+            showAuth();
+            return;
+        }
+
+        const data = await res.json();
+
+        // Guard against non-array responses (e.g. error objects)
+        if (!Array.isArray(data)) {
+            console.error('Unexpected response from /expenses:', data);
+            allExpenses = [];
+        } else {
+            allExpenses = data;
+        }
+
+        // Sort by creation date (newest first)
+        allExpenses.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         renderExpenses(allExpenses);
     } catch (err) {
         console.error(err);
@@ -199,13 +225,21 @@ function handleSearchInput(event) {
 
 async function addExpense(e) {
     e.preventDefault();
-    const description = document.getElementById('desc').value.trim();
-    const amount = document.getElementById('amount').value;
+    let description = document.getElementById('desc').value.trim();
+    if (description) {
+        description = description.charAt(0).toUpperCase() + description.slice(1);
+    }
+    const amount = parseFloat(document.getElementById('amount').value);
     const category = document.getElementById('category').value.trim();
     const date = document.getElementById('date').value;
 
     if (!date) {
         alert('Please select a date.');
+        return;
+    }
+
+    if (isNaN(amount) || amount <= 0) {
+        alert('Please enter a valid positive amount.');
         return;
     }
 
@@ -227,12 +261,19 @@ async function addExpense(e) {
             document.getElementById('date').max = today;
             loadExpenses();
         } else {
-            const data = await res.json();
+            let data;
+            try {
+                data = await res.json();
+            } catch (parseErr) {
+                // If the response is not JSON (e.g. 404 HTML page), handle it gracefully
+                alert(`Failed to add task: Server returned a non-JSON response (Status ${res.status}). Make sure the backend is running.`);
+                return;
+            }
             alert(`Failed to add task: ${data.error || data.details || 'Unknown error'}`);
         }
     } catch (err) {
         console.error(err);
-        alert('Network error — could not add task.');
+        alert(`Network error — could not add task. ${err.message}`);
     }
 }
 
@@ -413,7 +454,7 @@ function enableInlineEdit(id, description, amount, category, date) {
             <input type="date" id="edit-date-${id}" value="${formattedDate}" max="${new Date().toISOString().split('T')[0]}" class="inline-input">
         </div>
         <div style="display:flex; align-items:center; gap: 10px;">
-            <input type="number" id="edit-amount-${id}" value="${amount}" step="0.01" class="inline-input-amount">
+            <input type="number" id="edit-amount-${id}" value="${amount}" step="any" min="0" class="inline-input-amount">
             <div class="expense-actions">
                 <button onclick="saveInlineEdit('${id}')" class="confirm-btn" title="Save">Save</button>
                 <button onclick="cancelInlineEdit()" class="cancel-btn" title="Cancel">Cancel</button>
@@ -427,8 +468,11 @@ function cancelInlineEdit() {
 }
 
 async function saveInlineEdit(id) {
-    const description = document.getElementById(`edit-desc-${id}`).value;
-    const amount = document.getElementById(`edit-amount-${id}`).value;
+    let description = document.getElementById(`edit-desc-${id}`).value.trim();
+    if (description) {
+        description = description.charAt(0).toUpperCase() + description.slice(1);
+    }
+    const amount = parseFloat(document.getElementById(`edit-amount-${id}`).value);
     const category = document.getElementById(`edit-cat-${id}`).value;
     const date = document.getElementById(`edit-date-${id}`).value;
 

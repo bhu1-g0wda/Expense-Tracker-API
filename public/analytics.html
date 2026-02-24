@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics – Task Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+    <style>
+        /* Reset all conflicting body rules from style.css */
+        html,
+        body {
+            height: auto !important;
+            min-height: 100vh;
+            overflow: auto !important;
+        }
+
+        body {
+            display: block !important;
+            padding: 0;
+        }
+
+        .analytics-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+            width: 90%;
+            max-width: 1100px;
+            margin: 2rem auto;
+            padding: 2.5rem;
+            animation: scaleIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .analytics-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        .analytics-header h1 {
+            margin-bottom: 0;
+            text-align: left;
+            font-size: 2rem;
+            background: linear-gradient(to right, var(--primary), #ec4899);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .back-btn {
+            background: #e0e7ff;
+            color: var(--primary);
+            width: auto;
+            padding: 0.75rem 1.5rem;
+            box-shadow: none;
+            font-size: 0.95rem;
+        }
+
+        .back-btn:hover {
+            background: #c7d2fe;
+            transform: translateY(-1px);
+        }
+
+        .analytics-grid {
+            display: grid;
+            grid-template-columns: 4fr 6fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .analytics-grid-single {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        @media (max-width: 768px) {
+            .analytics-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 1.75rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h2 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            max-width: 320px;
+            margin: 0 auto;
+        }
+
+        /* Legend */
+        .legend {
+            margin-top: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.875rem;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-right: 8px;
+        }
+
+        .legend-label {
+            display: flex;
+            align-items: center;
+            color: var(--text-main);
+            flex: 1;
+        }
+
+        .legend-value {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        /* Forecast cards */
+        .forecast-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 1rem;
+        }
+
+        .forecast-stat {
+            background: linear-gradient(135deg, #e0e7ff, #fae8ff);
+            border-radius: 16px;
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .forecast-stat .label {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .forecast-stat .value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            background: linear-gradient(to right, var(--primary), #ec4899);
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .forecast-stat .sub {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Trend bar */
+        .trend-section {
+            margin-top: 1.25rem;
+        }
+
+        .trend-row {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.6rem;
+        }
+
+        .trend-label {
+            width: 90px;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .trend-bar-bg {
+            flex: 1;
+            height: 10px;
+            background: #e0e7ff;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .trend-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            background: linear-gradient(to right, var(--primary), var(--primary-soft));
+            transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .trend-amount {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--primary);
+            min-width: 55px;
+            text-align: right;
+        }
+
+        .insight-box {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            border-radius: 16px;
+            padding: 1.25rem 1.5rem;
+            margin-top: 1.25rem;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .insight-box strong {
+            display: block;
+            font-size: 1rem;
+            margin-bottom: 0.4rem;
+        }
+
+        #no-data-msg {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+            font-size: 1rem;
+        }
+
+        .spinner {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-shapes">
+        <div class="shape"></div>
+        <div class="shape"></div>
+        <div class="shape"></div>
+    </div>
+
+    <div class="analytics-container">
+        <div class="analytics-header">
+            <h1>Analytics</h1>
+            <button class="back-btn" onclick="window.location.href='index.html'">← Back to Tasks</button>
+        </div>
+
+        <div id="loading" class="spinner">Loading your data…</div>
+        <div id="no-data-msg" style="display:none;">No expense data yet. Add some tasks to see analytics!</div>
+
+        <div id="analytics-content" style="display:none;">
+            <!-- Row 1 -->
+            <div class="analytics-grid">
+                <!-- Pie Chart -->
+                <div class="card">
+                    <h2>Spending by Category</h2>
+                    <div class="chart-wrapper">
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                    <div class="legend" id="chart-legend"></div>
+                </div>
+
+                <!-- Daily Usage Graph -->
+                <div class="card">
+                    <h2>Daily Usage (Current Month)</h2>
+                    <div class="chart-wrapper" style="max-width: 100%; height: 250px;">
+                        <canvas id="dailyChart"></canvas>
+                    </div>
+                    <!-- Drill-down section for specific day -->
+                    <div id="daily-breakdown"
+                        style="display: none; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+                        <h3 id="daily-breakdown-title"
+                            style="font-size: 1rem; color: var(--text-main); margin-bottom: 0.75rem;"></h3>
+                        <div id="daily-breakdown-content"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Budget & Historical -->
+            <div class="analytics-grid-single">
+                <!-- Budget vs Actual -->
+                <div class="card">
+                    <h2>Monthly Budget vs Actual</h2>
+                    <div class="trend-section">
+                        <div class="trend-row" style="margin-bottom: 1rem;">
+                            <div class="trend-label"
+                                style="width: auto; flex: 1; font-size: 1rem; color: var(--text-main);">
+                                Spent <span id="budget-spent" class="trend-amount"></span> of <span id="budget-total"
+                                    class="trend-amount"></span>
+                            </div>
+                            <div id="budget-pct" class="trend-amount" style="font-size: 1.1rem;"></div>
+                        </div>
+                        <div class="trend-bar-bg" style="height: 16px; border-radius: 8px;">
+                            <div id="budget-bar-fill" class="trend-bar-fill" style="width:0%; border-radius: 8px;">
+                            </div>
+                        </div>
+                        <div id="budget-insight" class="insight-box" style="margin-top: 1.5rem; display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Historical Comparison -->
+                <div class="card">
+                    <h2>Historical Monthly Comparison</h2>
+                    <div class="chart-wrapper" style="max-width: 100%; height: 250px;">
+                        <canvas id="historicalChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let API_URL = '';
+        if (window.location.protocol === 'file:' || ((window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && window.location.port !== '3000')) {
+            API_URL = 'http://localhost:3000';
+        }
+        const token = localStorage.getItem('token');
+
+        // Redirect if not logged in
+        if (!token) {
+            window.location.href = '/';
+        }
+
+        // ── Colour palette ──────────────────────────────────────────
+        const PALETTE = [
+            '#4f46e5', '#7c3aed', '#ec4899', '#f59e0b',
+            '#10b981', '#06b6d4', '#f97316', '#84cc16',
+            '#6366f1', '#14b8a6', '#e11d48', '#0ea5e9'
+        ];
+
+        // ── Helpers ──────────────────────────────────────────────────
+        function fmt(n) { return '$' + parseFloat(n).toFixed(2); }
+
+        function getDaysInMonth(year, month) {
+            return new Date(year, month + 1, 0).getDate();
+        }
+
+        // Helper for "1st", "2nd", "3rd", etc.
+        function getOrdinalSuff(n) {
+            const s = ["th", "st", "nd", "rd"];
+            const v = n % 100;
+            return (s[(v - 20) % 10] || s[v] || s[0]);
+        }
+
+        // ── Forecast: linear regression on monthly totals ────────────
+        function forecast(expenses) {
+            const now = new Date();
+            const thisMonth = now.getMonth();
+            const thisYear = now.getFullYear();
+
+            // Build map: "YYYY-M" → total
+            const monthMap = {};
+            expenses.forEach(exp => {
+                const d = new Date(exp.date);
+                const key = `${d.getFullYear()}-${d.getMonth()}`;
+                monthMap[key] = (monthMap[key] || 0) + parseFloat(exp.amount);
+            });
+
+            // Last 6 months (excluding current partial month)
+            const points = [];
+            for (let i = 5; i >= 1; i--) {
+                const d = new Date(thisYear, thisMonth - i, 1);
+                const key = `${d.getFullYear()}-${d.getMonth()}`;
+                points.push(monthMap[key] || 0);
+            }
+
+            // Current month so far
+            const currentKey = `${thisYear}-${thisMonth}`;
+            const currentSpent = monthMap[currentKey] || 0;
+
+            // Days elapsed this month
+            const today = now.getDate();
+            const nextMonthDays = getDaysInMonth(thisYear, thisMonth + 1);
+
+            // Daily run-rate from current month
+            const dailyRate = today > 0 ? currentSpent / today : 0;
+            const runRateForecast = dailyRate * nextMonthDays;
+
+            // Simple average of past months (ignore zeros for cleaner estimate)
+            const nonZero = points.filter(v => v > 0);
+            const avgMonthly = nonZero.length ? nonZero.reduce((a, b) => a + b, 0) / nonZero.length : currentSpent;
+
+            // Weighted blend: 60% run-rate, 40% historical avg
+            const blended = nonZero.length > 0
+                ? runRateForecast * 0.6 + avgMonthly * 0.4
+                : runRateForecast;
+
+            // Trend direction
+            const last = points[points.length - 1] || avgMonthly;
+            const trendPct = last > 0 ? ((blended - last) / last) * 100 : 0;
+
+            return {
+                forecast: blended,
+                dailyRate,
+                currentSpent,
+                avgMonthly,
+                trendPct,
+                nextMonthDays
+            };
+        }
+
+        // ── Main ─────────────────────────────────────────────────────
+        async function loadAnalytics() {
+            try {
+                const res = await fetch(`${API_URL}/expenses`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                // If auth failed (e.g. token expired), redirect to login
+                if (res.status === 401 || res.status === 403) {
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                    window.location.href = '/';
+                    return;
+                }
+
+                const expenses = await res.json();
+                document.getElementById('loading').style.display = 'none';
+
+                // Guard: API returned an error object instead of an array
+                if (!Array.isArray(expenses) || expenses.length === 0) {
+                    document.getElementById('no-data-msg').style.display = 'block';
+                    return;
+                }
+
+                // Also fetch user budget
+                const budgetRes = await fetch(`${API_URL}/users/budget`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                let userBudget = 0;
+                if (budgetRes.ok) {
+                    const budgetData = await budgetRes.json();
+                    userBudget = budgetData.budget || 0;
+                }
+
+                document.getElementById('analytics-content').style.display = 'block';
+
+                // 1️⃣ Group by category
+                const catMap = {};
+                expenses.forEach(exp => {
+                    const cat = exp.category || 'Other';
+                    catMap[cat] = (catMap[cat] || 0) + parseFloat(exp.amount);
+                });
+
+                const categories = Object.keys(catMap).sort((a, b) => catMap[b] - catMap[a]);
+                const amounts = categories.map(c => catMap[c]);
+                const total = amounts.reduce((a, b) => a + b, 0);
+                const colors = categories.map((_, i) => PALETTE[i % PALETTE.length]);
+
+                // 2️⃣ Pie chart
+                const ctx = document.getElementById('pieChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: categories,
+                        datasets: [{
+                            data: amounts,
+                            backgroundColor: colors,
+                            borderWidth: 3,
+                            borderColor: '#fff',
+                            hoverOffset: 10
+                        }]
+                    },
+                    options: {
+                        cutout: '62%',
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => ` ${ctx.label}: ${fmt(ctx.raw)} (${((ctx.raw / total) * 100).toFixed(1)}%)`
+                                }
+                            }
+                        },
+                        animation: { animateScale: true, duration: 900 }
+                    }
+                });
+
+                // 3️⃣ Custom legend
+                const legendEl = document.getElementById('chart-legend');
+                categories.forEach((cat, i) => {
+                    const pct = ((catMap[cat] / total) * 100).toFixed(1);
+                    legendEl.innerHTML += `
+                        <div class="legend-item">
+                            <div class="legend-label">
+                                <span class="legend-dot" style="background:${colors[i]}"></span>
+                                ${cat}
+                            </div>
+                            <span class="legend-value">${fmt(catMap[cat])} <span style="color:var(--text-muted);font-weight:400">(${pct}%)</span></span>
+                        </div>`;
+                });
+
+                // 4️⃣ Daily Usage Graph (Current Month)
+                const now = new Date();
+                const thisMonth = now.getMonth();
+                const thisYear = now.getFullYear();
+                const daysInMonth = getDaysInMonth(thisYear, thisMonth);
+
+                // Initialize array for each day of the month with 0
+                const dailyTotals = Array(daysInMonth).fill(0);
+                const dayLabels = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+                // Populate daily totals using currentMonthData
+                const currentMonthData = [];
+                expenses.forEach(exp => {
+                    const d = new Date(exp.date);
+                    // Only count expenses from current month/year
+                    if (d.getMonth() === thisMonth && d.getFullYear() === thisYear) {
+                        currentMonthData.push(exp);
+                        const dayIndex = d.getDate() - 1; // 1st day is index 0
+                        dailyTotals[dayIndex] += parseFloat(exp.amount);
+                    }
+                });
+
+                // Extract drilldown logic to a reusable function
+                const renderDayBreakdown = (clickedDay) => {
+                    // Find expenses for this specific day
+                    const dayExpenses = currentMonthData.filter(exp => {
+                        const expDate = new Date(exp.date);
+                        return expDate.getDate() === clickedDay;
+                    });
+
+                    const bdContainer = document.getElementById('daily-breakdown');
+                    const bdTitle = document.getElementById('daily-breakdown-title');
+                    const bdContent = document.getElementById('daily-breakdown-content');
+
+                    bdTitle.textContent = `Expenses for The ${clickedDay}${getOrdinalSuff(clickedDay)}`;
+
+                    if (dayExpenses.length === 0) {
+                        bdContent.innerHTML = `<p style="color: var(--text-muted); font-size: 0.85rem; margin: 0;">No expenses recorded on this day.</p>`;
+                    } else {
+                        let html = `<ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.5rem;">`;
+                        dayExpenses.forEach(exp => {
+                            html += `
+                                <li style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; background: rgba(255,255,255,0.5); padding: 0.5rem 0.75rem; border-radius: 8px;">
+                                    <div style="display: flex; flex-direction: column;">
+                                        <span style="font-weight: 500;">${exp.description}</span>
+                                        <span style="color: var(--text-muted); font-size: 0.75rem;">${exp.category}</span>
+                                    </div>
+                                    <span style="font-weight: 600; color: var(--primary);">${fmt(exp.amount)}</span>
+                                </li>
+                            `;
+                        });
+                        html += `</ul>`;
+                        bdContent.innerHTML = html;
+                    }
+
+                    bdContainer.style.display = 'block';
+                };
+
+                // Calculate dynamic colors based on budget proximity for the daily chart
+                const dailyBgColors = dailyTotals.map(val => {
+                    if (userBudget <= 0) return 'rgba(79, 70, 229, 0.6)'; // default primary (indigo)
+                    const pct = Math.min(val / userBudget, 1);
+                    // Interpolate between Indigo (79, 70, 229) and Red (239, 68, 68)
+                    const r = Math.round(79 + (239 - 79) * pct);
+                    const g = Math.round(70 + (68 - 70) * pct);
+                    const b = Math.round(229 + (68 - 229) * pct);
+                    return `rgba(${r}, ${g}, ${b}, 0.6)`;
+                });
+                const dailyBorderColors = dailyBgColors.map(c => c.replace('0.6)', '1)'));
+
+                const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+                new Chart(dailyCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: dayLabels,
+                        datasets: [{
+                            label: 'Amount Spent',
+                            data: dailyTotals,
+                            backgroundColor: dailyBgColors,
+                            borderColor: dailyBorderColors,
+                            borderWidth: 1,
+                            borderRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => ` ${fmt(ctx.raw)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: userBudget > 0 ? userBudget : undefined,
+                                ticks: {
+                                    callback: function (value) {
+                                        return '$' + value;
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    autoSkip: false,
+                                    maxRotation: 45,
+                                    minRotation: 0
+                                }
+                            }
+                        },
+                        animation: { duration: 900 },
+                        onClick: (event, elements) => {
+                            if (elements.length > 0) {
+                                const index = elements[0].index;
+                                const clickedDay = index + 1; // index is 0-based, days are 1-based
+                                renderDayBreakdown(clickedDay);
+                            }
+                        },
+                        onHover: (event, elements) => {
+                            event.native.target.style.cursor = elements.length ? 'pointer' : 'default';
+                        }
+                    }
+                });
+
+                // Default to showing the drilldown for the day with the highest expenditure
+                const maxExpense = Math.max(...dailyTotals);
+                if (maxExpense > 0) {
+                    const maxExpenseDayIndex = dailyTotals.indexOf(maxExpense);
+                    renderDayBreakdown(maxExpenseDayIndex + 1);
+                }
+
+                // 5️⃣ Budget vs Actual
+                const currentSpent = currentMonthData.reduce((sum, exp) => sum + parseFloat(exp.amount), 0);
+
+                document.getElementById('budget-spent').textContent = fmt(currentSpent);
+                document.getElementById('budget-total').textContent = fmt(userBudget);
+
+                const budgetPctEl = document.getElementById('budget-pct');
+                const budgetBarFill = document.getElementById('budget-bar-fill');
+                const budgetInsight = document.getElementById('budget-insight');
+
+                if (userBudget > 0) {
+                    const pct = (currentSpent / userBudget) * 100;
+                    const cappedPct = Math.min(pct, 100);
+
+                    budgetPctEl.textContent = `${pct.toFixed(1)}%`;
+
+                    // Animate width
+                    requestAnimationFrame(() => {
+                        budgetBarFill.style.width = `${cappedPct}%`;
+
+                        // Color styling based on budget consumption
+                        if (pct >= 90) {
+                            budgetBarFill.style.background = '#ef4444'; // Red (Danger)
+                            budgetPctEl.style.color = '#ef4444';
+                        } else if (pct >= 75) {
+                            budgetBarFill.style.background = '#f59e0b'; // Yellow (Warning)
+                            budgetPctEl.style.color = '#f59e0b';
+                        }
+                    });
+
+                    budgetInsight.style.display = 'block';
+                    if (pct >= 100) {
+                        budgetInsight.innerHTML = `<strong>⚠️ Over Budget</strong> You have exceeded your monthly budget by ${fmt(currentSpent - userBudget)}. Recommend holding off on non-essential purchases.`;
+                        budgetInsight.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+                    } else if (pct >= 80) {
+                        budgetInsight.innerHTML = `<strong>⚠️ Nearing Budget Limit</strong> You have ${fmt(userBudget - currentSpent)} remaining for the month. Pace your spending.`;
+                        budgetInsight.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+                    } else {
+                        budgetInsight.innerHTML = `<strong>✅ On Track</strong> You have ${fmt(userBudget - currentSpent)} remaining. Your spending is well within limits.`;
+                        budgetInsight.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                    }
+                } else {
+                    budgetPctEl.textContent = 'No budget set';
+                    budgetBarFill.style.width = '0%';
+                }
+
+                // 6️⃣ Historical Monthly Comparison
+                // Gather last 6 months data
+                const monthLabels = [];
+                const monthlyTotals = [];
+
+                for (let i = 5; i >= 0; i--) {
+                    const d = new Date(thisYear, thisMonth - i, 1);
+                    const monthName = d.toLocaleString('default', { month: 'short' });
+                    monthLabels.push(monthName);
+
+                    // Sum expenses for this specific month/year
+                    const monthSum = expenses.reduce((sum, exp) => {
+                        const expDate = new Date(exp.date);
+                        if (expDate.getMonth() === d.getMonth() && expDate.getFullYear() === d.getFullYear()) {
+                            return sum + parseFloat(exp.amount);
+                        }
+                        return sum;
+                    }, 0);
+                    monthlyTotals.push(monthSum);
+                }
+
+                const historicalCtx = document.getElementById('historicalChart').getContext('2d');
+                new Chart(historicalCtx, {
+                    type: 'line',
+                    data: {
+                        labels: monthLabels,
+                        datasets: [{
+                            label: 'Monthly Spending',
+                            data: monthlyTotals,
+                            borderColor: '#ec4899', // Pink accent
+                            backgroundColor: 'rgba(236, 72, 153, 0.1)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.3, // Curve the line slightly
+                            pointBackgroundColor: '#ec4899',
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => ` Total: ${fmt(ctx.raw)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                },
+                                ticks: {
+                                    callback: function (value) {
+                                        return '$' + value;
+                                    }
+                                }
+                            },
+                            x: {
+                                grid: { display: false }
+                            }
+                        }
+                    }
+                });
+
+            } catch (err) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('no-data-msg').style.display = 'block';
+                document.getElementById('no-data-msg').textContent = 'Failed to load data. Please check your connection and try again.';
+                console.error(err);
+            }
+        }
+
+        loadAnalytics();
+    </script>
+</body>
+
+</html>
