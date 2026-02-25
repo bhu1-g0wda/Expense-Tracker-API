@@ -5,5 +5,6 @@ const authMiddleware = require('../middleware/authMiddleware');
 
 router.get('/budget', authMiddleware, userController.getBudget);
 router.put('/budget', authMiddleware, userController.updateBudget);
+router.get('/search', authMiddleware, userController.searchUsers);
 
 module.exports = router;

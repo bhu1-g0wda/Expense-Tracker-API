@@ -20,18 +20,20 @@ exports.signup = async (req, res) => {
 
         res.status(201).json({ message: 'User created successfully', userId: user._id });
     } catch (error) {
+        if (error.code === 11000) {
+            const field = Object.keys(error.keyValue)[0];
+            return res.status(400).json({ error: `The ${field} "${error.keyValue[field]}" is already in use. Please choose another.` });
+        }
         res.status(500).json({ error: 'Error creating user', details: error.message });
     }
 };
 
 exports.login = async (req, res) => {
     try {
-        const { identifier, password } = req.body;
+        const { email, password } = req.body;
 
-        // Find user by email OR username
-        const user = await User.findOne({
-            $or: [{ email: identifier }, { username: identifier }]
-        });
+        // Find user by email only
+        const user = await User.findOne({ email });
 
         if (!user) {
             return res.status(400).json({ error: 'Invalid credentials' });
@@ -43,9 +45,9 @@ exports.login = async (req, res) => {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
 
-        res.json({ token, userId: user._id, username: user.username });
+        res.json({ token, userId: user._id, email: user.email, username: user.username });
     } catch (error) {
         res.status(500).json({ error: 'Error logging in', details: error.message });
     }

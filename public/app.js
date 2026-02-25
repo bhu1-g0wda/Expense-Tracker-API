@@ -75,14 +75,19 @@ async function signup() {
         const data = await res.json();
 
         if (res.ok) {
-            document.getElementById('auth-message').textContent = 'Signup successful! Please login.';
             // Switch to login tab
             showTab('login', null);
             document.querySelectorAll('.tab-btn').forEach((btn, i) => {
                 btn.classList.toggle('active', i === 0);
             });
+            // Show success message after switching tabs so it doesn't get cleared
+            document.getElementById('auth-message').style.color = 'green';
+            document.getElementById('auth-message').textContent = 'Signup successful! Please login.';
         } else {
-            document.getElementById('auth-message').textContent = data.error;
+            document.getElementById('auth-message').style.color = '#ef4444';
+            let errMsg = data.error || 'Signup failed';
+            if (data.details) errMsg += ': ' + data.details;
+            document.getElementById('auth-message').textContent = errMsg;
         }
     } catch (err) {
         console.error(err);
@@ -90,14 +95,14 @@ async function signup() {
 }
 
 async function login() {
-    const identifier = document.getElementById('login-identifier').value;
+    const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
 
     try {
         const res = await fetch(`${API_URL}/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier, password })
+            body: JSON.stringify({ email, password })
         });
         const data = await res.json();
 
@@ -172,23 +177,45 @@ function renderExpenses(expensesToRender) {
         li.className = 'expense-item';
         li.id = `expense-${exp.id}`;
 
-        // Format creation date
-        const createdDate = new Date(exp.createdAt).toLocaleString();
+        // Format expense date (the date the task/expense actually occurred)
+        let displayDate = 'No date';
+        if (exp.date) {
+            // Add timezone offset to prevent off-by-one errors when formatting UTC dates
+            const d = new Date(exp.date);
+            displayDate = new Date(d.getTime() + d.getTimezoneOffset() * 60000).toLocaleDateString();
+        } else if (exp.createdAt) {
+            displayDate = new Date(exp.createdAt).toLocaleDateString();
+        }
+
+        // Split Logic: an expense is a share if it has a splitGroupId but isSplitCreator is falsy.
+        const isSplitShare = exp.splitGroupId && !exp.isSplitCreator;
 
         // Escape quotes for onclick params
         const safeDesc = exp.description.replace(/'/g, "\\'");
         const safeCat = exp.category.replace(/'/g, "\\'");
 
+        // If the expense has splitUsers populated, pass them along
+        let splitUsersJson = '[]';
+        if (exp.isSplitCreator && exp.splitUsers) {
+            // Encode the JSON so that quotes don't break the HTML attribute
+            splitUsersJson = encodeURIComponent(JSON.stringify(exp.splitUsers));
+        }
+
+        // Only render the action buttons if it's NOT a split share
+        const actionsHtml = isSplitShare
+            ? ''
+            : `<button onclick="enableInlineEdit('${exp.id}', '${safeDesc}', '${exp.amount}', '${safeCat}', '${exp.date}', ${exp.isSplitCreator || false}, '${splitUsersJson}')" class="edit-btn" title="Edit">✎</button>
+               <button onclick="requestDelete('${exp.id}')" title="Delete">✕</button>`;
+
         li.innerHTML = `
             <div class="expense-info">
                 <strong>${escapeHTML(exp.description)}</strong>
-                <small>${escapeHTML(exp.category)} • ${createdDate}</small>
+                <small>${escapeHTML(exp.category)} • ${displayDate}</small>
             </div>
             <div style="display:flex; align-items:center;">
-                <span class="expense-amount">$${exp.amount}</span>
+                <span class="expense-amount">$${parseFloat(exp.amount).toFixed(2)}</span>
                 <div class="expense-actions" id="actions-${exp.id}">
-                    <button onclick="enableInlineEdit('${exp.id}', '${safeDesc}', '${exp.amount}', '${safeCat}', '${exp.date}')" class="edit-btn" title="Edit">✎</button>
-                    <button onclick="requestDelete('${exp.id}')" title="Delete">✕</button>
+                    ${actionsHtml}
                 </div>
             </div>
         `;
@@ -223,6 +250,109 @@ function handleSearchInput(event) {
     }
 }
 
+let splitWithUsers = []; // Array of { id, username } to split the expense with
+let searchTimeout = null;
+
+async function handleUserSearch(event) {
+    const query = event.target.value.trim();
+    const resultsContainer = document.getElementById('split-search-results');
+
+    if (query.length < 2) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`${API_URL}/users/search?query=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const users = await res.json();
+                renderSearchResults(users);
+            }
+        } catch (err) {
+            console.error('Error searching users:', err);
+        }
+    }, 300); // Debounce
+}
+
+function renderSearchResults(users) {
+    const resultsContainer = document.getElementById('split-search-results');
+    resultsContainer.innerHTML = '';
+
+    // Filter out users already selected
+    const unselectedUsers = users.filter(u => !splitWithUsers.some(selected => selected.id === u._id));
+
+    if (unselectedUsers.length === 0) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    unselectedUsers.forEach(u => {
+        const li = document.createElement('li');
+        li.textContent = u.username;
+        li.style.padding = '0.5rem 1rem';
+        li.style.cursor = 'pointer';
+        li.style.borderBottom = '1px solid #f0f0f0';
+        li.onmouseover = () => li.style.backgroundColor = '#f8fafc';
+        li.onmouseout = () => li.style.backgroundColor = 'transparent';
+        li.onclick = () => selectUserToSplit(u._id, u.username);
+        resultsContainer.appendChild(li);
+    });
+
+    resultsContainer.style.display = 'block';
+}
+
+function selectUserToSplit(id, username) {
+    splitWithUsers.push({ id, username });
+    renderSelectedUsers();
+
+    // Clear search
+    const searchInput = document.getElementById('split-search');
+    searchInput.value = '';
+    document.getElementById('split-search-results').style.display = 'none';
+    searchInput.focus();
+}
+
+function removeSplitUser(id) {
+    splitWithUsers = splitWithUsers.filter(u => u.id !== id);
+    renderSelectedUsers();
+}
+
+function renderSelectedUsers() {
+    const container = document.getElementById('split-selected-users');
+    container.innerHTML = '';
+
+    splitWithUsers.forEach(u => {
+        const badge = document.createElement('div');
+        badge.style.display = 'inline-flex';
+        badge.style.alignItems = 'center';
+        badge.style.background = '#e0e7ff';
+        badge.style.color = 'var(--primary)';
+        badge.style.padding = '0.25rem 0.75rem';
+        badge.style.borderRadius = '9999px';
+        badge.style.fontSize = '0.85rem';
+        badge.style.fontWeight = '500';
+
+        badge.innerHTML = `
+            ${escapeHTML(u.username)}
+            <button type="button" onclick="removeSplitUser('${u.id}')" style="background: none; border: none; color: var(--primary); margin-left: 5px; font-weight: bold; cursor: pointer; padding: 0;">&times;</button>
+        `;
+        container.appendChild(badge);
+    });
+}
+
+// Close search results when clicking outside
+document.addEventListener('click', (e) => {
+    const searchSection = document.querySelector('.split-section');
+    const results = document.getElementById('split-search-results');
+    if (searchSection && results && !searchSection.contains(e.target)) {
+        results.style.display = 'none';
+    }
+});
+
 async function addExpense(e) {
     e.preventDefault();
     let description = document.getElementById('desc').value.trim();
@@ -250,15 +380,28 @@ async function addExpense(e) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ description, amount, category, date })
+            body: JSON.stringify({
+                description,
+                amount,
+                category,
+                date,
+                splitWithUsers: splitWithUsers.map(u => u.id)
+            })
         });
 
         if (res.ok) {
+            // Save the currently selected date so we don't reset it to today if they are entering a batch for yesterday
+            const currentSelectedDate = document.getElementById('date').value;
+
             document.getElementById('expense-form').reset();
-            // Restore default date to today after form reset
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById('date').value = today;
-            document.getElementById('date').max = today;
+
+            // Re-apply the selected date instead of forcing today
+            document.getElementById('date').value = currentSelectedDate || new Date().toISOString().split('T')[0];
+
+            // Clear split users
+            splitWithUsers = [];
+            renderSelectedUsers();
+
             loadExpenses();
         } else {
             let data;
@@ -299,10 +442,20 @@ function cancelDelete(id) {
     const safeDesc = exp.description.replace(/'/g, "\\'");
     const safeCat = exp.category.replace(/'/g, "\\'");
 
-    actionsDiv.innerHTML = `
-        <button onclick="enableInlineEdit('${exp.id}', '${safeDesc}', '${exp.amount}', '${safeCat}', '${exp.date}')" class="edit-btn" title="Edit">✎</button>
-        <button onclick="requestDelete('${id}')" title="Delete">✕</button>
-    `;
+    // Validate if it is a split share
+    const isSplitShare = exp.splitGroupId && !exp.isSplitCreator;
+
+    // Only render the action buttons if it's NOT a split share
+    let splitUsersJson = '[]';
+    if (exp.isSplitCreator && exp.splitUsers) {
+        splitUsersJson = encodeURIComponent(JSON.stringify(exp.splitUsers));
+    }
+    const actionsHtml = isSplitShare
+        ? ''
+        : `<button onclick="enableInlineEdit('${exp.id}', '${safeDesc}', '${exp.amount}', '${safeCat}', '${exp.date}', ${exp.isSplitCreator || false}, '${splitUsersJson}')" class="edit-btn" title="Edit">✎</button>
+           <button onclick="requestDelete('${id}')" title="Delete">✕</button>`;
+
+    actionsDiv.innerHTML = actionsHtml;
 }
 
 async function deleteExpense(id) {
@@ -329,6 +482,11 @@ async function loadBudget() {
         const data = await res.json();
         if (res.ok) {
             userBudget = data.budget || 0;
+            if (data.username) {
+                user = data.username;
+                localStorage.setItem('user', user);
+                document.getElementById('user-display').textContent = user;
+            }
             updateBudgetUI();
         }
     } catch (err) {
@@ -437,7 +595,118 @@ function updateBudgetUI() {
 
 
 // Inline Edit Functions
-function enableInlineEdit(id, description, amount, category, date) {
+// We need a global state map to track split edits per row because inline edits can technically happen on multiple rows 
+// (though our UI usually just opens one). 
+let editSplitUsersMap = {};
+
+function toggleEditSplitUserSearch(id) {
+    const searchSection = document.getElementById(`edit-split-section-${id}`);
+    if (searchSection.style.display === 'none') {
+        searchSection.style.display = 'block';
+    } else {
+        searchSection.style.display = 'none';
+    }
+}
+
+async function handleEditUserSearch(event, id) {
+    const query = event.target.value.trim();
+    const resultsContainer = document.getElementById(`edit-split-search-results-${id}`);
+
+    if (query.length < 2) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch(`${API_URL}/users/search?query=${encodeURIComponent(query)}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) {
+                const users = await res.json();
+                renderEditSearchResults(users, id);
+            }
+        } catch (err) {
+            console.error('Error searching users:', err);
+        }
+    }, 300);
+}
+
+function renderEditSearchResults(users, objId) {
+    const resultsContainer = document.getElementById(`edit-split-search-results-${objId}`);
+    resultsContainer.innerHTML = '';
+
+    const currentSplitUsers = editSplitUsersMap[objId] || [];
+
+    // Filter out users already selected in this specific edit row
+    const unselectedUsers = users.filter(u => !currentSplitUsers.some(selected => selected.id === u._id || selected._id === u._id));
+
+    if (unselectedUsers.length === 0) {
+        resultsContainer.style.display = 'none';
+        return;
+    }
+
+    unselectedUsers.forEach(u => {
+        const li = document.createElement('li');
+        li.textContent = u.username;
+        li.style.padding = '0.5rem 1rem';
+        li.style.cursor = 'pointer';
+        li.style.borderBottom = '1px solid #f0f0f0';
+        li.onmouseover = () => li.style.backgroundColor = '#f8fafc';
+        li.onmouseout = () => li.style.backgroundColor = 'transparent';
+        li.onclick = () => selectEditUserToSplit(u._id, u.username, objId);
+        resultsContainer.appendChild(li);
+    });
+
+    resultsContainer.style.display = 'block';
+}
+
+function selectEditUserToSplit(userId, username, objId) {
+    if (!editSplitUsersMap[objId]) editSplitUsersMap[objId] = [];
+    editSplitUsersMap[objId].push({ _id: userId, username });
+    renderEditSelectedUsers(objId);
+
+    const searchInput = document.getElementById(`edit-split-search-${objId}`);
+    searchInput.value = '';
+    document.getElementById(`edit-split-search-results-${objId}`).style.display = 'none';
+}
+
+function removeEditSplitUser(userId, objId) {
+    if (editSplitUsersMap[objId]) {
+        editSplitUsersMap[objId] = editSplitUsersMap[objId].filter(u => u._id !== userId);
+        renderEditSelectedUsers(objId);
+    }
+}
+
+function renderEditSelectedUsers(objId) {
+    const container = document.getElementById(`edit-split-selected-${objId}`);
+    if (!container) return;
+
+    container.innerHTML = '';
+    const users = editSplitUsersMap[objId] || [];
+
+    users.forEach(u => {
+        const badge = document.createElement('div');
+        badge.style.display = 'inline-flex';
+        badge.style.alignItems = 'center';
+        badge.style.background = '#e0e7ff';
+        badge.style.color = 'var(--primary)';
+        badge.style.padding = '0.2rem 0.5rem';
+        badge.style.borderRadius = '9999px';
+        badge.style.fontSize = '0.75rem';
+        badge.style.fontWeight = '500';
+
+        badge.innerHTML = `
+            ${escapeHTML(u.username)}
+            <button type="button" onclick="removeEditSplitUser('${u._id}', '${objId}')" style="background: none; border: none; color: var(--primary); margin-left: 5px; font-weight: bold; cursor: pointer; padding: 0;">&times;</button>
+        `;
+        container.appendChild(badge);
+    });
+}
+
+
+function enableInlineEdit(id, description, amount, category, date, isSplitCreator = false, splitUsersJson = '[]') {
     const li = document.getElementById(`expense-${id}`);
 
     // Format date for input — split the ISO string directly to avoid timezone-shift issues
@@ -447,20 +716,61 @@ function enableInlineEdit(id, description, amount, category, date) {
     const safeDesc = description.replace(/"/g, '&quot;');
     const safeCat = category.replace(/"/g, '&quot;');
 
+    let splitHTML = '';
+
+    // If it's a split creator, decode the JSON and setup the split editing UI
+    if (isSplitCreator) {
+        try {
+            const decodedJson = decodeURIComponent(splitUsersJson);
+            const initialSplitUsers = JSON.parse(decodedJson);
+            editSplitUsersMap[id] = initialSplitUsers;
+
+            splitHTML = `
+                <div style="width: 100%; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--glass-border); font-size: 0.85rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <label style="font-weight: 500; color: var(--text-main);">Modify Split Participants:</label>
+                        <button onclick="toggleEditSplitUserSearch('${id}')" style="background: none; border: 1px solid #ccc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">+ Add User</button>
+                    </div>
+                    
+                    <div id="edit-split-selected-${id}" style="display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 5px;">
+                        <!-- Badges injected here -->
+                    </div>
+                    
+                    <div id="edit-split-section-${id}" style="display: none; position: relative; margin-top: 5px;">
+                        <input type="text" id="edit-split-search-${id}" placeholder="Search user..." oninput="handleEditUserSearch(event, '${id}')" autocomplete="off" style="width: 100%; padding: 0.4rem; font-size: 0.85rem; border: 1px solid #ccc; border-radius: 4px;">
+                        <ul id="edit-split-search-results-${id}" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; list-style: none; padding: 0; margin: 0; z-index: 100; max-height: 120px; overflow-y: auto; border-radius: 0 0 4px 4px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);"></ul>
+                    </div>
+                </div>
+            `;
+        } catch (e) {
+            console.error("Failed to parse split users", e);
+        }
+    }
+
     li.innerHTML = `
-        <div class="expense-info inline-edit-form">
-            <input type="text" id="edit-desc-${id}" value="${safeDesc}" placeholder="Description" class="inline-input">
-            <input type="text" id="edit-cat-${id}" value="${safeCat}" placeholder="Category" class="inline-input">
-            <input type="date" id="edit-date-${id}" value="${formattedDate}" max="${new Date().toISOString().split('T')[0]}" class="inline-input">
-        </div>
-        <div style="display:flex; align-items:center; gap: 10px;">
-            <input type="number" id="edit-amount-${id}" value="${amount}" step="any" min="0" class="inline-input-amount">
-            <div class="expense-actions">
-                <button onclick="saveInlineEdit('${id}')" class="confirm-btn" title="Save">Save</button>
-                <button onclick="cancelInlineEdit()" class="cancel-btn" title="Cancel">Cancel</button>
+        <div style="flex-direction: column; width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; width: 100%; gap: 10px;">
+                <div class="expense-info inline-edit-form" style="flex: 1;">
+                    <input type="text" id="edit-desc-${id}" value="${safeDesc}" placeholder="Description" class="inline-input">
+                    <input type="text" id="edit-cat-${id}" value="${safeCat}" placeholder="Category" class="inline-input">
+                    <input type="date" id="edit-date-${id}" value="${formattedDate}" max="${new Date().toISOString().split('T')[0]}" class="inline-input">
+                </div>
+                <div style="display:flex; align-items:center; gap: 10px;">
+                    <input type="number" id="edit-amount-${id}" value="${amount}" step="any" min="0" class="inline-input-amount">
+                    <div class="expense-actions">
+                        <button onclick="saveInlineEdit('${id}')" class="confirm-btn" title="Save">Save</button>
+                        <button onclick="cancelInlineEdit()" class="cancel-btn" title="Cancel">Cancel</button>
+                    </div>
+                </div>
             </div>
+            ${splitHTML}
         </div>
     `;
+
+    // If there were initial splits, render their badges immediately
+    if (isSplitCreator) {
+        renderEditSelectedUsers(id);
+    }
 }
 
 function cancelInlineEdit() {
@@ -476,6 +786,11 @@ async function saveInlineEdit(id) {
     const category = document.getElementById(`edit-cat-${id}`).value;
     const date = document.getElementById(`edit-date-${id}`).value;
 
+    let splitWithUsers = [];
+    if (editSplitUsersMap[id]) {
+        splitWithUsers = editSplitUsersMap[id].map(u => u._id || u.id);
+    }
+
     try {
         const res = await fetch(`${API_URL}/expenses/${id}`, {
             method: 'PUT',
@@ -483,10 +798,12 @@ async function saveInlineEdit(id) {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ description, amount, category, date })
+            body: JSON.stringify({ description, amount, category, date, splitWithUsers })
         });
 
         if (res.ok) {
+            // Clean up the local memory state
+            delete editSplitUsersMap[id];
             loadExpenses();
         }
     } catch (err) {

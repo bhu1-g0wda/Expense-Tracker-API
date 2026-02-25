@@ -27,7 +27,7 @@
 
             <div id="login-form" class="auth-form">
                 <h2>Login</h2>
-                <input type="text" id="login-identifier" placeholder="Email or Username" required>
+                <input type="email" id="login-email" placeholder="Email Address" required>
                 <input type="password" id="login-password" placeholder="Password" required>
                 <button onclick="login()">Login</button>
             </div>
@@ -60,6 +60,26 @@
                         <input type="number" id="amount" placeholder="Value/Cost ($)" step="any" min="0" required>
                         <input type="text" id="category" placeholder="Category" required>
                         <input type="date" id="date" required>
+
+                        <!-- Split Expense Section -->
+                        <div class="split-section"
+                            style="margin-top: 1rem; margin-bottom: 1rem; padding-top: 1rem; border-top: 1px solid var(--glass-border);">
+                            <label
+                                style="font-size: 0.9rem; color: var(--text-main); font-weight: 500; display: block; margin-bottom: 0.5rem;">Split
+                                with (optional):</label>
+                            <div style="position: relative;">
+                                <input type="text" id="split-search" placeholder="Search username..."
+                                    oninput="handleUserSearch(event)" autocomplete="off">
+                                <ul id="split-search-results"
+                                    style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #ddd; border-top: none; list-style: none; padding: 0; margin: 0; z-index: 100; max-height: 150px; overflow-y: auto; border-radius: 0 0 8px 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                                </ul>
+                            </div>
+                            <div id="split-selected-users"
+                                style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+                                <!-- Selected users badge will appear here -->
+                            </div>
+                        </div>
+
                         <button type="submit">Add Task</button>
                     </form>
                 </div>

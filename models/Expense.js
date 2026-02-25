@@ -25,6 +25,18 @@ const expenseSchema = new mongoose.Schema({
             message: 'Date cannot be in the future'
         }
     },
+    splitGroupId: {
+        type: String,
+        default: null
+    },
+    isSplitCreator: {
+        type: Boolean,
+        default: false
+    },
+    splitUsers: [{
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+    }],
     userId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User',
