@@ -31,12 +31,19 @@ app.get('/{*path}', (req, res) => {
 });
 
 // Connect to Database and start server
-const startServer = async () => {
-    await connectDB();
+if (process.env.NODE_ENV !== 'production') {
+    const startServer = async () => {
+        await connectDB();
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    };
+    startServer();
+} else {
+    // In production (Vercel), we just need to establish the DB connection
+    // and export the app. Vercel's serverless environment handles the listening.
+    connectDB();
+}
 
-    app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
-    });
-};
-
-startServer();
+// Export the app for Vercel Serverless Functions
+module.exports = app;

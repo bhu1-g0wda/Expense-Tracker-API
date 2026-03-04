@@ -1,11 +1,18 @@
 const admin = require('firebase-admin');
 
-// Ensure the credential file exists before trying to require it
 let serviceAccount;
+
 try {
-    serviceAccount = require('../firebase-service-account.json');
+    // 1. Try to parse from Vercel Environment Variable first
+    if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+    }
+    // 2. Fallback to local file for development
+    else {
+        serviceAccount = require('../firebase-service-account.json');
+    }
 } catch (error) {
-    console.error('Missing firebase-service-account.json. Please add it to the project root.');
+    console.error('Failed to load Firebase credentials. Ensure firebase-service-account.json exists locally or FIREBASE_SERVICE_ACCOUNT env var is set in Vercel.');
     process.exit(1);
 }
 
