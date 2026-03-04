@@ -9,21 +9,30 @@ exports.signup = async (req, res) => {
     try {
         const { username, email, password } = req.body;
 
+        // In Firestore, we must manually check for uniqueness
+        const emailCheck = await User.where('email', '==', email).limit(1).get();
+        if (!emailCheck.empty) {
+            return res.status(400).json({ error: `The email "${email}" is already in use.` });
+        }
+
+        const usernameCheck = await User.where('username', '==', username).limit(1).get();
+        if (!usernameCheck.empty) {
+            return res.status(400).json({ error: `The username "${username}" is already in use.` });
+        }
+
         // hash password
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        const user = await User.create({
+        const userRef = await User.add({
             username,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            budget: 0,
+            createdAt: new Date().toISOString()
         });
 
-        res.status(201).json({ message: 'User created successfully', userId: user._id });
+        res.status(201).json({ message: 'User created successfully', userId: userRef.id });
     } catch (error) {
-        if (error.code === 11000) {
-            const field = Object.keys(error.keyValue)[0];
-            return res.status(400).json({ error: `The ${field} "${error.keyValue[field]}" is already in use. Please choose another.` });
-        }
         res.status(500).json({ error: 'Error creating user', details: error.message });
     }
 };
@@ -33,21 +42,24 @@ exports.login = async (req, res) => {
         const { email, password } = req.body;
 
         // Find user by email only
-        const user = await User.findOne({ email });
+        const snapshot = await User.where('email', '==', email).limit(1).get();
 
-        if (!user) {
+        if (snapshot.empty) {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
+        const userData = snapshot.docs[0].data();
+        const userId = snapshot.docs[0].id;
+
+        const isMatch = await bcrypt.compare(password, userData.password);
 
         if (!isMatch) {
             return res.status(400).json({ error: 'Invalid credentials' });
         }
 
-        const token = jwt.sign({ id: user._id, email: user.email }, JWT_SECRET, { expiresIn: '1h' });
+        const token = jwt.sign({ id: userId, email: userData.email }, JWT_SECRET, { expiresIn: '1h' });
 
-        res.json({ token, userId: user._id, email: user.email, username: user.username });
+        res.json({ token, userId: userId, email: userData.email, username: userData.username });
     } catch (error) {
         res.status(500).json({ error: 'Error logging in', details: error.message });
     }

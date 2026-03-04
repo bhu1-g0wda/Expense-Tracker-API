@@ -1,53 +1,7 @@
-const mongoose = require('mongoose');
+const { db } = require('../config/database');
 
-const expenseSchema = new mongoose.Schema({
-    description: {
-        type: String,
-        required: true
-    },
-    amount: {
-        type: Number,
-        required: true,
-        min: 0
-    },
-    category: {
-        type: String,
-        required: true
-    },
-    date: {
-        type: Date,
-        required: true,
-        default: Date.now,
-        validate: {
-            validator: function (v) {
-                return v <= new Date();
-            },
-            message: 'Date cannot be in the future'
-        }
-    },
-    splitGroupId: {
-        type: String,
-        default: null
-    },
-    isSplitCreator: {
-        type: Boolean,
-        default: false
-    },
-    splitUsers: [{
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User'
-    }],
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-        required: true
-    }
-}, {
-    timestamps: true,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
-});
-
-const Expense = mongoose.model('Expense', expenseSchema);
+// In Firebase, we don't need a rigid schema definition, 
+// we just export the collection reference to be used by controllers.
+const Expense = db.collection('expenses');
 
 module.exports = Expense;

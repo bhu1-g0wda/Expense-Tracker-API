@@ -1,15 +1,29 @@
-const mongoose = require('mongoose');
-require('dotenv').config();
+const admin = require('firebase-admin');
 
+// Ensure the credential file exists before trying to require it
+let serviceAccount;
+try {
+    serviceAccount = require('../firebase-service-account.json');
+} catch (error) {
+    console.error('Missing firebase-service-account.json. Please add it to the project root.');
+    process.exit(1);
+}
+
+try {
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
+    console.log('Firebase initialized successfully');
+} catch (err) {
+    console.error('Firebase initialization error:', err);
+    process.exit(1);
+}
+
+const db = admin.firestore();
+
+// Maintain a connectDB function to not break server.js structure
 const connectDB = async () => {
-    try {
-        const mongoURI = process.env.MONGO_URI || 'mongodb://localhost:27017/expense-tracker';
-        await mongoose.connect(mongoURI);
-        console.log('MongoDB connected');
-    } catch (err) {
-        console.error('MongoDB connection error:', err);
-        process.exit(1);
-    }
+    return true; // Connection is synchronous in Firebase
 };
 
-module.exports = connectDB;
+module.exports = { db, connectDB, admin };
