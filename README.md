@@ -6,9 +6,9 @@
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
 [![Platform: Vercel](https://img.shields.io/badge/platform-vercel-black.svg)](https://vercel.com/)
 
-A modern, full-stack, responsive web application and REST API designed to track tasks and expenses individually or collaboratively. The application features secure token-based user authentication, cooperative cost-splitting (Splitwise-style), visual budget tracking with color-coded alerts, and a detailed Analytics dashboard featuring machine learning-inspired blended forecasting.
+A full-stack, responsive web application and REST API designed to track tasks and expenses individually or collaboratively. The application features secure token-based user authentication, Splitwise-style collaborative cost-splitting, dynamic budgeting with color-coded alerts, and an interactive analytics dashboard featuring blended linear-trend forecasting.
 
-Developed using **Node.js, Express, and Firebase Firestore** on the backend, with a highly interactive, responsive **Vanilla HTML5, CSS3, and JavaScript** frontend using **Chart.js**. It is fully pre-configured for serverless deployment on **Vercel**.
+Developed using **Node.js, Express, and Firebase Firestore** on the backend, with a highly interactive, responsive **Vanilla HTML5, CSS3, and JavaScript** frontend using **Chart.js**. It is pre-configured for serverless deployment on **Vercel**.
 
 ---
 
@@ -75,6 +75,97 @@ Expense Tracker/
 
 ---
 
+## 🗄️ Database Schema Design (Firestore)
+
+Since Google Cloud Firestore is a NoSQL document database, schema definitions are flexible. However, the system enforces a strict logical model to enable seamless relationships and cascade mechanisms.
+
+### 1. `users` Collection
+Each document uses a unique, auto-generated User ID:
+```json
+{
+  "username": "alice",
+  "email": "alice@example.com",
+  "password": "$2a$10$xyz...", // Hashed via bcryptjs
+  "budget": 2500, // Default is 0
+  "createdAt": "2026-06-09T18:42:00.000Z"
+}
+```
+
+### 2. `expenses` Collection
+Tracks personal expenditures as well as group billing relationships:
+```json
+{
+  "description": "Team lunch (Paid by you, split with bob, charlie)",
+  "amount": 90.00, // Full amount for creator; fractional amount for members
+  "category": "Food",
+  "date": "2026-06-09T18:42:00.000Z",
+  "userId": "user_id_of_owner",
+  "splitGroupId": "G3e1R8vX...", // null for single-user expenses; unique string for split groups
+  "isSplitCreator": true, // true for bill payer; false for split members
+  "splitUsers": ["bob_user_id", "charlie_user_id"], // Populated only for the creator
+  "createdAt": "2026-06-09T18:44:00.000Z"
+}
+```
+
+---
+
+## 🧠 Core Engineering Architectures
+
+### 1. Splitwise-Style Expense Partitioning (Cascade Engine)
+When a split expense is created, the system performs a transactional write to ensure data consistency across split participants:
+
+```javascript
+// From controllers/expenseController.js
+// 1. Create a parent expense for the creator storing the full amount paid
+const parentExpense = {
+    description: `${description} (Paid by you, split with ${splitUsernames})`,
+    amount: amount,
+    userId: creatorId,
+    splitGroupId,
+    isSplitCreator: true,
+    splitUsers
+};
+await Expense.add(parentExpense);
+
+// 2. Create child shares for each split participant storing their fractional portion
+const splitAmount = amount / (splitUsers.length + 1);
+const splitPromises = splitUsers.map(participantId => {
+    return Expense.add({
+        description: `${description} (Split share paid by ${creatorName})`,
+        amount: splitAmount,
+        userId: participantId,
+        splitGroupId,
+        isSplitCreator: false,
+        splitUsers: []
+    });
+});
+await Promise.all(splitPromises);
+```
+
+#### Cascade Modification and Deletion
+*   **Update**: When a creator edits a split expense (e.g. changing the amount, adding/removing members), the controller fetches all child records sharing the same `splitGroupId`, deletes them, and re-computes and re-creates new child shares.
+*   **Delete**: Deleting the parent expense automatically triggers a batch delete on all database records sharing that `splitGroupId`, ensuring zero orphaned database entries.
+
+### 2. Mathematical Forecasting Model
+The analytics portal uses a hybrid prediction algorithm to calculate the blended forecast for the next calendar month.
+
+Let:
+*   $E_{current}$ = Cumulative expenditure in the current partial month.
+*   $D_{elapsed}$ = Current elapsed days in the active month.
+*   $N_{next}$ = Total days in the next calendar month.
+*   $M_{hist}$ = Array of total expenses for complete historical months (excluding current month).
+*   $A_{hist}$ = Average of complete historical months where monthly total $> 0$.
+
+$$\text{Daily Run-Rate } (R_{daily}) = \frac{E_{current}}{D_{elapsed}}$$
+
+$$\text{Extrapolated Run-Rate Forecast } (F_{run}) = R_{daily} \times N_{next}$$
+
+$$\text{Blended Monthly Forecast } (F_{blended}) = 0.6 \cdot F_{run} + 0.4 \cdot A_{hist}$$
+
+This blend mitigates skewing: early-month spike anomalies are tempered by historical averages, while real-time changes in spending behavior are captured by the active run-rate.
+
+---
+
 ## ⚙️ Configuration & Setup
 
 ### Prerequisites
@@ -95,7 +186,7 @@ JWT_SECRET=your_custom_long_jwt_secret_key_here
 PORT=3000
 ```
 
-*Note: For production, you will also need to supply the credentials as a stringified environment variable (see Deployment section).*
+*Note: In production environments (like Vercel), you must supply the service account credentials as a single environment variable rather than a local file (see Deployment section).*
 
 ### 3. Installation
 Install the project dependencies locally:
@@ -186,6 +277,26 @@ The project contains an integration test suite located at `tests/app.test.js` co
 > 2. The tests do not mock the Firebase Admin SDK, meaning that importing controllers directly inside the test runner invokes Firestore methods on a MongoDB-backed Mock server.
 > 
 > To restore test functionality, the test suite needs to be rewritten to mock `firebase-admin` methods or run against a local Firebase Emulator suite.
+
+### Example Mock configuration for Jest
+To run tests using Firebase Firestore, create a file `tests/setup.js` and mock the `firebase-admin` methods to write to an in-memory mock store, or use the Firebase Local Emulator Suite.
+```javascript
+jest.mock('firebase-admin', () => {
+  const mockFirestore = {
+    collection: jest.fn(() => ({
+      where: jest.fn(() => ({
+        get: jest.fn(() => Promise.resolve({ empty: true, docs: [] }))
+      })),
+      add: jest.fn(() => Promise.resolve({ id: 'mock-id' }))
+    }))
+  };
+  return {
+    initializeApp: jest.fn(),
+    credential: { cert: jest.fn() },
+    firestore: () => mockFirestore
+  };
+});
+```
 
 ---
 
