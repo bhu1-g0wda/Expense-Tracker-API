@@ -8,3 +8,6 @@ npm-debug.log
 dist
 build
 coverage
+.vercel
+.env*.local
+firebase-service-account.json
